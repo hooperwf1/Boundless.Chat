@@ -4,7 +4,7 @@ ODIR = obj
 CC=gcc
 CFLAGS=-I$(IDIR) -lpthread -Wall -Werror -Wextra -g -Wno-format-truncation -lssl -lcrypto
 
-_OBJS=main.o logging.o hstring.o communication.o
+_OBJS=main.o logging.o hstring.o communication.o array.o
 OBJS=$(patsubst %,$(ODIR)/%,$(_OBJS))
 
 $(ODIR)/%.o: $(SDIR)/%.c $(IDIR)/%.h

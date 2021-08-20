@@ -9,14 +9,21 @@ int main(){
 
 	if(init_logging(0, "/var/log/boundless-client/") == -1)
 		return -1;
-	if(init_comms() == -1)
+
+	// Connect to boundless.chat at port 6667
+	struct com_ConnectionList *conList = init_connectionList();
+	if(conList == NULL)
 		return -1;
 
-	char buff[1024] = "PING\n";
-	int sock = com_connectSocket("boundless.chat", 6667);
-	write(sock, buff, strlen(buff));
-	read(sock, buff, ARRAY_SIZE(buff));
-	printf("%s\n", buff);
+	struct com_Connection *con = com_openConnection("boundless.chat", 6667);	
+	if(con == NULL)
+		return -1;
+
+	com_listenToConnection(conList, con);
+
+	pthread_t pollThread = com_startPolling(conList);	
+	printf("Thread id = %ld\n", pollThread);
+	pthread_join(pollThread, NULL);
 
 	return 1;
 }
