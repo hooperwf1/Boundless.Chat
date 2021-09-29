@@ -11,12 +11,12 @@ int main(){
 	if(init_logging(0, "/var/log/boundless-client/", 0) == -1)
 		return -1;
 
-	init_tui();
-
 	// Connect to boundless.chat at port 6667
 	struct com_ConnectionList *conList = init_connectionList();
 	if(conList == NULL)
 		return -1;
+
+	TUI *tui = init_tui(conList);
 
 	struct com_Connection *con = com_openConnection("boundless.chat", 6667);	
 	if(con == NULL)
@@ -26,7 +26,7 @@ int main(){
 
 	com_startPolling(conList);	
 
-	tui_close();
+	handleUserInput(tui);
 
 	return 1;
 }

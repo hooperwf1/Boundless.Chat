@@ -41,6 +41,8 @@ pthread_t com_startPolling(struct com_ConnectionList *cList);
 // use poll
 void *com_pollConnections(void *comList);
 
+int com_sendMessage(struct com_Connection *con, char *msg);
+
 // closes a socket and removes it from polling
 // leave con NULL to use pos, otherwise pos unused
 int com_deleteConnection(struct com_ConnectionList *cList, struct com_Connection *con, int pos);

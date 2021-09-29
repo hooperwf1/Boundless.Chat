@@ -62,7 +62,7 @@ void *com_pollConnections(void *ptr){
 		for(int i = 0; i < ARRAY_SIZE(comList->pfds); i++){
 			if(comList->pfds[i].revents != 0){
 				if(comList->pfds[i].revents & POLLIN){ // Data to read
-					int bytes = read(comList->pfds[i].fd, buff, sizeof(buff));
+					int bytes = read(comList->pfds[i].fd, buff, sizeof(buff)-1);
 					if(bytes == -1){
 						log_logError("Error reading from socket", WARNING);
 						com_deleteConnection(comList, NULL, i); 
@@ -72,6 +72,9 @@ void *com_pollConnections(void *ptr){
 						com_deleteConnection(comList, NULL, i); 
 						continue;
 					}
+					
+					// Ensure null byte
+					buff[bytes] = '\0';
 
 					printChatMessage(buff);
 				}
@@ -82,6 +85,12 @@ void *com_pollConnections(void *ptr){
 
 	log_logMessage("All connections are closed, stopping polling", INFO);
 	return NULL;
+}
+
+int com_sendMessage(struct com_Connection *con, char *msg){
+	write(con->socket, msg, strlen(msg));
+
+	return 1;
 }
 
 int com_deleteConnection(struct com_ConnectionList *cList, struct com_Connection *con, int pos){

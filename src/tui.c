@@ -2,13 +2,14 @@
 
 TUI *tui;
 
-TUI *init_tui(){
+TUI *init_tui(struct com_ConnectionList *cList){
 	TUI *t = calloc(1, sizeof(TUI));
 	if(t == NULL){
 		log_logError("Error allocation TUI", ERROR);
 		return NULL;
 	}
 	tui = t;
+	t->cList = cList;
 
 	setlocale(LC_ALL, "");
 	if(initscr() == NULL)
@@ -32,8 +33,33 @@ TUI *init_tui(){
 }
 
 void tui_close(){
-	getch();
 	endwin();
+}
+
+void handleUserInput(TUI *t){
+	while(1){
+		int c = getch();
+		switch(c){
+			case KEY_F(1):
+				if(t->active == t->text){
+					t->active = t->sidebar;
+					break;
+				}
+				t->active = t->text;
+				break;
+				
+			case 'q':
+				if(t->active == t->text)
+					goto typing;
+				exit(1);
+			
+			// Type into the text box
+			default:
+			typing:
+				typeCharacter(t, c);
+				break;
+		}
+	}
 }
 
 SECTION *createSection(char *title){
@@ -81,6 +107,7 @@ void drawTextbox(SECTION *text, TUI *t, int height){
 	int startx = getmaxx(t->sidebar->border)-1;
 
 	resizeSection(text, LINES-(height+1), startx, height, COLS-startx);
+	wmove(text->content, 0, 0);
 
 	WINDOW *border = text->border;
 	wborder(border, ACS_VLINE, ACS_VLINE, ACS_HLINE, ACS_HLINE, ACS_LTEE, ACS_RTEE, ACS_BTEE, ACS_LRCORNER);
@@ -117,6 +144,7 @@ int printChatMessage(char *msg){
 int drawMessages(TUI *t){
 	SECTION *chat = t->chat;
 	wclear(chat->content);
+	wmove(chat->content, 0, 0);
 
 	// Print
 	struct link_Node *n;
@@ -124,6 +152,36 @@ int drawMessages(TUI *t){
 		wprintw(chat->content, "%s\n", n->data);
 		wrefresh(chat->content);
 	}
+
+	return 1;
+}
+
+int typeCharacter(TUI *t, int ch){
+	SECTION *text = t->text;
+
+	if((ch == KEY_ENTER || ch == '\n') && text->index > 0){
+		text->chars[text->index] = '\n';
+		text->index++;
+		text->chars[text->index] = '\0';
+
+		printChatMessage(text->chars);
+		text->index = 0;
+
+		com_sendMessage(&t->cList->conns[0], text->chars);
+
+		wclear(text->content);
+		wrefresh(text->content);
+		return 1;
+	}
+	
+	if(iscntrl(ch) != 0) // Is not printable
+		return -1;
+
+	text->chars[text->index] = (char) ch;
+	text->index++;
+
+	wprintw(text->content, "%c", ch);
+	wrefresh(text->content);
 
 	return 1;
 }
@@ -136,8 +194,10 @@ int drawMessages(TUI *t){
 int setupWindows(TUI *t){
 	t->sidebar = createSection("Groups");
 	drawSidebar(t->sidebar);
+
 	t->text = createSection("");
 	drawTextbox(t->text, t, 3);
+
 	t->chat = createSection("Chat");
 	drawChatbox(t->chat, t);
 	scrollok(t->chat->content, TRUE);
