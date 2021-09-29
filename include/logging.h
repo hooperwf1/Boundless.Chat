@@ -8,7 +8,6 @@
 #include <sys/stat.h>
 #include <errno.h>
 #include "hstring.h"
-#include "main.h"
 
 #define TRACE	(0)
 #define DEBUG	(1)
@@ -19,6 +18,8 @@
 #define MESSAGE	(6)
 #define EVENT	(7)
 
+#define ARRAY_SIZE(arr) (int)(sizeof(arr)/sizeof(arr[0]))
+
 /* Struct that defines how logging should be carried out
    useFile determines if logs will go to a file or not
    directory specifies the directory that the log files will go 
@@ -26,14 +27,15 @@
    ONLY EDIT THIS STRUCT WITH THE log_editConfig() METHOD */
 struct log_Config {
 	int useFile;
+	int useStdout;
 	char directory[BUFSIZ];
 };
 
 //Setup intial data for logging
-int init_logging(int useFile, char *logDir);
+int init_logging(int useFile, char *logDir, int useStdout);
 
 //edits the log_Config struct, also logs changes it makes
-void log_editConfig(int useFule, char* dir);
+void log_editConfig(int useFile, char* dir, int useStdout);
 
 //open the log file
 int log_openFile();
@@ -48,7 +50,7 @@ int log_getTime(char str[22]);
 int log_getTimeShort(char str[11]);
 
 //Write to log file formatted
-int log_logToFile(char* msg, int type);
+int log_logToFile(char* msg, int type, FILE* f);
 
 //Print to stdin with sterror format
 void log_printLogError(char* msg, int type);

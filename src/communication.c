@@ -40,6 +40,16 @@ void *com_pollConnections(void *ptr){
 	int ret;
 	char buff[BUFSIZ];
 	struct com_ConnectionList *comList = (struct com_ConnectionList *) ptr;
+	
+	// Disable SIGWINCH for this thread
+	sigset_t set;
+	sigemptyset(&set);
+	sigaddset(&set, SIGWINCH);
+	ret = pthread_sigmask(SIG_BLOCK, &set, NULL);
+	if(ret != 0){
+		log_logError("Error blocking SIGWINCH", ERROR);
+		return NULL;
+	}
 
 	while(comList->numConnected > 0){
 		ret = poll(comList->pfds, ARRAY_SIZE(comList->pfds), -1);
@@ -54,17 +64,16 @@ void *com_pollConnections(void *ptr){
 				if(comList->pfds[i].revents & POLLIN){ // Data to read
 					int bytes = read(comList->pfds[i].fd, buff, sizeof(buff));
 					if(bytes == -1){
-						log_logMessage("Error reading from socket", WARNING);
+						log_logError("Error reading from socket", WARNING);
 						com_deleteConnection(comList, NULL, i); 
 						continue;
 					} else if (bytes == 0) { // Close
 						log_logMessage("Connection disconnect", INFO);
 						com_deleteConnection(comList, NULL, i); 
 						continue;
-
 					}
 
-					printf("%s\n", buff);
+					printChatMessage(buff);
 				}
 			}
 		}

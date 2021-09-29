@@ -12,6 +12,7 @@
 #include "linkedlist.h"
 #include "array.h"
 #include "main.h"
+#include "tui.h"
 
 #define POLL_SIZE 1024
 

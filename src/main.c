@@ -2,13 +2,16 @@
 
 void cleanup(){
 	log_logMessage("Exiting process", INFO);	
+	tui_close();
 }
 
 int main(){
 	atexit(cleanup);
 
-	if(init_logging(0, "/var/log/boundless-client/") == -1)
+	if(init_logging(0, "/var/log/boundless-client/", 0) == -1)
 		return -1;
+
+	init_tui();
 
 	// Connect to boundless.chat at port 6667
 	struct com_ConnectionList *conList = init_connectionList();
@@ -21,9 +24,9 @@ int main(){
 
 	com_listenToConnection(conList, con);
 
-	pthread_t pollThread = com_startPolling(conList);	
-	printf("Thread id = %ld\n", pollThread);
-	pthread_join(pollThread, NULL);
+	com_startPolling(conList);	
+
+	tui_close();
 
 	return 1;
 }

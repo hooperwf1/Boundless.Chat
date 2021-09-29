@@ -5,8 +5,8 @@ FILE* log_LogFile;
 
 struct log_Config log_LoggingConfig;
 
-int init_logging(int useFile, char *logDir){
-    log_editConfig(useFile, logDir);
+int init_logging(int useFile, char *logDir, int useStdout){
+    log_editConfig(useFile, logDir, useStdout);
     if(log_LoggingConfig.useFile){
         log_openFile();
     }
@@ -14,16 +14,18 @@ int init_logging(int useFile, char *logDir){
     return 1;
 }
 
-void log_editConfig(int useFile, char* dir){
+void log_editConfig(int useFile, char* dir, int useStdout){
 	if(log_LoggingConfig.useFile != useFile){
 		log_LoggingConfig.useFile = useFile;
 
 		if(!useFile){
-			log_printLogFormat("Disabled Logging to a file", INFO);
+			log_logMessage("Disabled Logging to a file", INFO);
 		} else {
-			log_printLogFormat("Enabled Logging to a file", INFO);
+			log_logMessage("Enabled Logging to a file", INFO);
 		}
 	}
+
+	log_LoggingConfig.useStdout = useStdout;
 
 	if(dir == NULL)
 		return;
@@ -58,7 +60,7 @@ int log_openFile(){
     log_LogFile = fopen(fileLoc, "a+");	
     if(!log_LogFile){
         log_printLogError("Error opening log file", ERROR);
-        log_editConfig(0, log_LoggingConfig.directory);
+        log_editConfig(0, log_LoggingConfig.directory, log_LoggingConfig.useStdout);
         return -1;
     }
 
@@ -91,22 +93,24 @@ int log_getTimeShort(char str[11]){
 	return 0;
 }
 
-int log_logToFile(char* msg, int type){
+int log_logToFile(char* msg, int type, FILE *f){
 	//check to see if log file is already open
-	if(!log_LogFile){
-            if(log_openFile() < 0){
-                return -1;
-            }
+	if(!f){
+		return -1;
 	}
 
 	char formattedMsg[BUFSIZ];
 	log_createLogFormat(formattedMsg, ARRAY_SIZE(formattedMsg), msg, type);
-	if(fprintf(log_LogFile, "%s\n", formattedMsg) < 0){
+	if(fprintf(f, "%s\n", formattedMsg) < 0){
 		log_printLogError("Error writing to log file", ERROR);
-		log_editConfig(0, log_LoggingConfig.directory);
+		if(f == stdout){
+			log_editConfig(log_LoggingConfig.useFile, log_LoggingConfig.directory, 0);
+		} else {
+			log_editConfig(0, log_LoggingConfig.directory, log_LoggingConfig.useStdout);
+		}
 		return -1;
 	}
-	fflush(log_LogFile);
+	fflush(f);
 
 	return 0;
 }
@@ -182,10 +186,14 @@ int log_logError(char* msg, int type){
 }
 
 int log_logMessage(char* msg, int type){
-	log_printLogFormat(msg, type);
+	if(log_LoggingConfig.useStdout){
+		if(log_logToFile(msg, type, stdout) < 0){
+			return -1;
+		}
+	}
 
 	if(log_LoggingConfig.useFile){
-		if(log_logToFile(msg, type) < 0){
+		if(log_logToFile(msg, type, log_LogFile) < 0){
 			return -1;
 		}
 	}
