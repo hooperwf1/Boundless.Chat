@@ -171,6 +171,21 @@ int typeCharacter(TUI *t, int ch){
 
 		wclear(text->content);
 		wrefresh(text->content);
+
+		return 1;
+	} else if (ch == KEY_BACKSPACE){
+		int cur = getcurx(text->content);
+		if(cur > 0){ // Is at beginning of line?
+			text->index--;
+			text->chars[text->index] = '\0';
+
+			// Remove the deleted character
+			wclear(text->content);
+			wmove(text->content, 0, 0);
+			wprintw(text->content, text->chars);
+			wrefresh(text->content);
+		}
+
 		return 1;
 	}
 	
