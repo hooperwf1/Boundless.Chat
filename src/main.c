@@ -19,10 +19,9 @@ int main(){
 	TUI *tui = init_tui(conList);
 
 	struct com_Connection *con = com_openConnection("boundless.chat", 6667);	
-	if(con == NULL)
-		return -1;
-
-	com_listenToConnection(conList, con);
+	if(con != NULL){
+		com_listenToConnection(conList, con);
+	}
 
 	com_startPolling(conList);	
 

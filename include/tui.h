@@ -22,6 +22,11 @@ typedef struct {
 	WINDOW *content;
 	char title[10];
 
+	// VLINE, HLINE, UL, UR, LL, LR
+	int borderChars[6];
+	int startx, starty;
+	int endx, endy;
+
 	// Misc data (chat msg, groups, etc)
 	union {
 		struct link_List data; // For saved messages
@@ -47,7 +52,7 @@ void tui_close();
 
 void handleUserInput(TUI *t);
 
-SECTION *createSection(char *title);
+SECTION *createSection(char *title, int borderChars[]);
 
 void drawSidebar(SECTION *sidebar);
 void drawChatbox(SECTION *chat, TUI *t);
@@ -55,12 +60,23 @@ void drawTextbox(SECTION *text, TUI *t, int height);
 
 int resizeSection(SECTION *s, int starty, int startx, int height, int width);
 
+// Make sure to supply newline yourself
 int printChatMessage(char *msg);
 
 int drawMessages(TUI *t);
 
 // Type character into the text box
 int typeCharacter(TUI *t, int ch);
+
+// Handle keyboard input, highlight etc
+int setActiveSection(TUI *t, SECTION *s);
+
+int sectionContainsPoint(SECTION *s, int y, int x);
+
+int drawBorderTitle(SECTION *s);
+
+int drawBorder(SECTION *s, int bBuffer[LINES][COLS]);
+int drawBorders(TUI *t);
 
 //Place all windows
 int setupWindows(TUI *t);

@@ -88,6 +88,9 @@ void *com_pollConnections(void *ptr){
 }
 
 int com_sendMessage(struct com_Connection *con, char *msg){
+	if(con == NULL || msg == NULL)
+		return -1;
+
 	write(con->socket, msg, strlen(msg));
 
 	return 1;

@@ -15,8 +15,10 @@ TUI *init_tui(struct com_ConnectionList *cList){
 	if(initscr() == NULL)
 		return NULL;
 
-	if(has_colors())
+	if(has_colors()){
 		start_color();
+		init_pair(1, COLOR_BLUE, COLOR_BLACK);
+	}
 
 	raw();
 	noecho();
@@ -40,12 +42,15 @@ void handleUserInput(TUI *t){
 	while(1){
 		int c = getch();
 		switch(c){
-			case KEY_F(1):
+			case KEY_F(1): //Switch active panel
 				if(t->active == t->text){
-					t->active = t->sidebar;
-					break;
+					setActiveSection(t, t->sidebar);
+				} else if (t->active == t->sidebar){
+					setActiveSection(t, t->chat);
+				} else {
+					setActiveSection(t, t->text);
 				}
-				t->active = t->text;
+
 				break;
 				
 			case 'q':
@@ -56,13 +61,14 @@ void handleUserInput(TUI *t){
 			// Type into the text box
 			default:
 			typing:
-				typeCharacter(t, c);
+				if(t->active == t->text)
+					typeCharacter(t, c);
 				break;
 		}
 	}
 }
 
-SECTION *createSection(char *title){
+SECTION *createSection(char *title, int borderChars[]){
 	SECTION *section = calloc(1, sizeof(SECTION));
 	if(section == NULL){
 		log_logError("Error allocating sidebar", ERROR);
@@ -75,6 +81,8 @@ SECTION *createSection(char *title){
 	section->border = border;
 	section->content = content;
 
+	memcpy(section->borderChars, borderChars, sizeof(section->borderChars));
+
 	return section;
 }
 
@@ -83,8 +91,6 @@ void drawSidebar(SECTION *sidebar){
 	resizeSection(sidebar, 1, 0, LINES-2, width);
 
 	WINDOW *border = sidebar->border;
-	wborder(border, ACS_VLINE, ACS_VLINE, ACS_HLINE, ACS_HLINE, ACS_ULCORNER, ACS_TTEE, ACS_LLCORNER, ACS_BTEE);
-	mvwprintw(border, 0, (width-strlen(sidebar->title))/2, sidebar->title);
 	wrefresh(border);
 }
 
@@ -97,8 +103,6 @@ void drawChatbox(SECTION *chat, TUI *t){
 	wmove(chat->content, 0, 0);
 
 	WINDOW *border = chat->border;
-	wborder(border, ACS_VLINE, ACS_VLINE, ACS_HLINE, ACS_HLINE, ACS_TTEE, ACS_URCORNER, ACS_LTEE, ACS_RTEE);
-	mvwprintw(border, 0, (width-strlen(chat->title))/2, chat->title);
 	wrefresh(border);
 	wrefresh(chat->content);
 }
@@ -110,7 +114,6 @@ void drawTextbox(SECTION *text, TUI *t, int height){
 	wmove(text->content, 0, 0);
 
 	WINDOW *border = text->border;
-	wborder(border, ACS_VLINE, ACS_VLINE, ACS_HLINE, ACS_HLINE, ACS_LTEE, ACS_RTEE, ACS_BTEE, ACS_LRCORNER);
 	wrefresh(border);
 }
 
@@ -122,6 +125,11 @@ int resizeSection(SECTION *s, int starty, int startx, int height, int width){
 	WINDOW *content = s->content;
 	wresize(content, height-2, width-2);
 	mvwin(content, starty+1, startx+1);
+
+	s->starty = starty;
+	s->startx = startx;
+	s->endx = startx + width - 1;
+	s->endy = starty + height - 1;
 
 	return 1;
 }
@@ -135,7 +143,7 @@ int printChatMessage(char *msg){
 	strhcpy(save, msg, size);
 
 	link_add(&chat->data, save);
-	wprintw(chat->content, "%s\n", save);
+	wprintw(chat->content, "%s", save);
 	wrefresh(chat->content);
 
 	return 1;
@@ -159,6 +167,7 @@ int drawMessages(TUI *t){
 int typeCharacter(TUI *t, int ch){
 	SECTION *text = t->text;
 
+	// Enter
 	if((ch == KEY_ENTER || ch == '\n') && text->index > 0){
 		text->chars[text->index] = '\n';
 		text->index++;
@@ -201,22 +210,120 @@ int typeCharacter(TUI *t, int ch){
 	return 1;
 }
 
+int setActiveSection(TUI *t, SECTION *s){
+	if(t->active != NULL)  // Remove active color from old active
+		wattroff(t->active->border, COLOR_PAIR(1));
+
+	t->active = s;	
+	wattron(t->active->border, COLOR_PAIR(1));
+	drawBorders(t);
+
+	return 1;
+}
+
+int sectionContainsPoint(SECTION *s, int y, int x){
+	if(y >= s->starty && y <= s->endy && x >= s->startx && x <= s->endx)
+		return 1;
+
+	return -1;
+}
+
+int drawBorderTitle(SECTION *s){
+	int width = s->endx - s->startx + 1;
+	mvwprintw(s->border, 0, (width-strlen(s->title))/2, s->title);
+	wrefresh(s->border);
+
+	return 1;
+}
+
+int drawBorder(SECTION *s, int bBuffer[LINES][COLS]){
+	int *chars = s->borderChars;
+
+	// Insert top and bottom
+	for(int i = s->startx + 1; i < s->endx; i++){
+		bBuffer[s->starty][i] = chars[1];
+		bBuffer[s->endy][i] = chars[1];
+	}
+
+	// Insert left and right
+	for(int i = s->starty + 1; i < s->endy; i++){
+		bBuffer[i][s->startx] = chars[0];
+		bBuffer[i][s->endx] = chars[0];
+	}
+
+	// Insert corners
+	bBuffer[s->starty][s->startx] = chars[2];
+	bBuffer[s->starty][s->endx] = chars[3];
+	bBuffer[s->endy][s->startx] = chars[4];
+	bBuffer[s->endy][s->endx] = chars[5];
+
+	wrefresh(s->content);
+
+	return 1;
+}
+
+int drawBorders(TUI *t){
+	int bBuffer[LINES][COLS]; // Buffer to store border for later drawing
+	memset(bBuffer, 0, LINES * COLS * sizeof(int));
+
+	drawBorder(t->sidebar, bBuffer);
+	drawBorder(t->text, bBuffer);
+	drawBorder(t->chat, bBuffer);
+
+	//Highlight focused one
+	SECTION *a = t->active;
+	for(int y = 0; y < LINES; y++){
+		for(int x = 0; x < COLS; x++){
+			if(bBuffer[y][x] == 0)
+				continue;
+
+			attron(A_BOLD);
+			if(sectionContainsPoint(a, y, x) == 1){
+				attron(COLOR_PAIR(1));
+			} else {
+				attroff(COLOR_PAIR(1));
+			}
+
+			mvaddch(y, x, bBuffer[y][x]);
+
+			attron(A_NORMAL);
+		}
+	}
+
+	refresh();
+
+	drawBorderTitle(t->sidebar);
+	drawBorderTitle(t->chat);
+
+	return 1;
+}
+
 /*	MUST be done in this order
 	1. Sidebar
 	2. Textbox
 	3. Chatbox
 */
 int setupWindows(TUI *t){
-	t->sidebar = createSection("Groups");
+	//Sidebar
+	int borderChars[8] = {ACS_VLINE, ACS_HLINE, ACS_ULCORNER, ACS_TTEE, ACS_LLCORNER, ACS_BTEE};
+	t->sidebar = createSection("Groups", borderChars);
 	drawSidebar(t->sidebar);
 
-	t->text = createSection("");
+	// Textbox
+	int borderChars1[] = {ACS_VLINE, ACS_HLINE, ACS_LTEE, ACS_RTEE, ACS_BTEE, ACS_LRCORNER};
+	t->text = createSection("", borderChars1);
 	drawTextbox(t->text, t, 3);
 
-	t->chat = createSection("Chat");
+	//Chatbox
+	int borderChars2[] = {ACS_VLINE, ACS_HLINE, ACS_TTEE, ACS_URCORNER, ACS_LTEE, ACS_RTEE};
+	t->chat = createSection("Chat", borderChars2);
 	drawChatbox(t->chat, t);
 	scrollok(t->chat->content, TRUE);
 
+	// Default active section
+	setActiveSection(t, t->sidebar);
+
+	drawBorders(t);
 	//wscrl
 
 	return 1;
