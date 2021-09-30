@@ -157,9 +157,20 @@ int drawMessages(TUI *t){
 	// Print
 	struct link_Node *n;
 	for(n = chat->data.head; n != NULL; n = n->next){
-		wprintw(chat->content, "%s\n", n->data);
+		wprintw(chat->content, "%s", n->data);
 		wrefresh(chat->content);
 	}
+
+	return 1;
+}
+
+int drawTextinput(TUI *t){
+	SECTION *text = t->text;
+
+	wclear(text->content);
+	wmove(text->content, 0, 0);
+	wprintw(text->content, text->chars);
+	wrefresh(text->content);
 
 	return 1;
 }
@@ -178,6 +189,7 @@ int typeCharacter(TUI *t, int ch){
 
 		com_sendMessage(&t->cList->conns[0], text->chars);
 
+		text->chars[0] = '\0';
 		wclear(text->content);
 		wrefresh(text->content);
 
@@ -189,10 +201,7 @@ int typeCharacter(TUI *t, int ch){
 			text->chars[text->index] = '\0';
 
 			// Remove the deleted character
-			wclear(text->content);
-			wmove(text->content, 0, 0);
-			wprintw(text->content, text->chars);
-			wrefresh(text->content);
+			drawTextinput(t);
 		}
 
 		return 1;
@@ -204,8 +213,7 @@ int typeCharacter(TUI *t, int ch){
 	text->chars[text->index] = (char) ch;
 	text->index++;
 
-	wprintw(text->content, "%c", ch);
-	wrefresh(text->content);
+	drawTextinput(t);
 
 	return 1;
 }
@@ -294,6 +302,9 @@ int drawBorders(TUI *t){
 
 	drawBorderTitle(t->sidebar);
 	drawBorderTitle(t->chat);
+
+	drawMessages(t);
+	drawTextinput(t);
 
 	return 1;
 }

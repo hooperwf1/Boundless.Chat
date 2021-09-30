@@ -65,6 +65,8 @@ int printChatMessage(char *msg);
 
 int drawMessages(TUI *t);
 
+int drawTextinput(TUI *t);
+
 // Type character into the text box
 int typeCharacter(TUI *t, int ch);
 
