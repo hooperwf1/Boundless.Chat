@@ -2,7 +2,7 @@
 
 TUI *tui;
 
-TUI *init_tui(struct com_ConnectionList *cList){
+TUI *init_tui(CONLIST *cList){
 	TUI *t = calloc(1, sizeof(TUI));
 	if(t == NULL){
 		log_logError("Error allocation TUI", ERROR);
@@ -24,6 +24,7 @@ TUI *init_tui(struct com_ConnectionList *cList){
 	noecho();
 	keypad(stdscr, TRUE); //Enable F1, arrows keys, etc
 	box(stdscr, 0, 0);
+	curs_set(0);
 	refresh();
 
 	// Handle resizing
@@ -36,6 +37,132 @@ TUI *init_tui(struct com_ConnectionList *cList){
 
 void tui_close(){
 	endwin();
+}
+
+MENU *createMenu(){
+	MENU *m = calloc(1, sizeof(MENU));
+	if(m == NULL){
+		log_logError("Error allocating MENU", ERROR);
+		return NULL;
+	}
+
+	// Init mutex
+	int ret = pthread_mutex_init(&m->mutex, NULL);
+	if(ret < 0){
+		log_logError("Error initalizing mutex", ERROR);
+		free(m);
+		return NULL;
+	}
+
+	return m;
+}
+
+MENUITEM *createMenuItem(char *text, void *ptr){
+	MENUITEM *item = calloc(1, sizeof(MENUITEM));
+	if(item == NULL){
+		log_logError("Error allocating MENUITEM", ERROR);
+		return NULL;
+	}
+
+	int size = strlen(text)+1;
+	item->text = malloc(size);
+	if(item->text == NULL){
+		log_logError("Error allocating MENUITEM string", ERROR);
+		free(item);
+		return NULL;
+	}
+
+	// Init mutex
+	int ret = pthread_mutex_init(&item->mutex, NULL);
+	if(ret < 0){
+		log_logError("Error initalizing mutex", ERROR);
+		free(item);
+		free(item->text);
+		return NULL;
+	}
+
+	item->enableSubitems = DISABLE;
+	item->ptr = ptr;
+	strhcpy(item->text, text, size);
+
+	return item;
+}
+
+void freeMenu(MENU *m){
+	link_clear(&m->items, freeMenuItem);
+
+	free(m);
+}
+
+void freeMenuItem(void *iptr){
+	MENUITEM *i = (MENUITEM *) iptr;
+	link_clear(&i->subitems, freeMenuItem);
+
+	free(i->text);
+	free(i);
+}
+
+int addItemToMenu(MENU *m, MENUITEM *i){
+	pthread_mutex_lock(&m->mutex);
+	// Make this item selected if it is the first
+	if(link_isEmpty(&m->items) == 1)
+		m->selected = i;
+
+	link_add(&m->items, i);
+	pthread_mutex_unlock(&m->mutex);
+
+	return 1;
+}
+
+int addSubitem(MENUITEM *item, MENUITEM *sub){
+	pthread_mutex_lock(&item->mutex);
+	link_add(&item->subitems, sub);
+	pthread_mutex_unlock(&item->mutex);
+
+	return 1;
+}
+
+int drawMenu(MENU *m, SECTION *s){
+	wclear(s->content);
+	wmove(s->content, 0, 0);
+
+	pthread_mutex_lock(&m->mutex);
+	struct link_Node *n;
+	for(n = m->items.head; n != NULL; n = n->next){
+		drawMenuItem(n->data, m, s);
+	}
+	pthread_mutex_unlock(&m->mutex);
+
+	wrefresh(s->content);
+
+	return 1;
+}
+
+int drawMenuItem(MENUITEM *item, MENU *m, SECTION *s){
+	pthread_mutex_lock(&item->mutex);
+	//Draw item
+	if(item == m->selected)
+		wattron(s->content, A_BOLD);
+	waddstr(s->content, item->text);
+	wprintw(s->content, "\n");
+	wattroff(s->content, A_BOLD);
+
+	// Draw any subitems if applicable
+	if(item->enableSubitems == ENABLE){
+		struct link_Node *n;
+		for(n = item->subitems.head; n != NULL; n = n->next){
+			//Branch before subitem
+			if(n->next != NULL)
+				waddch(s->content, ACS_LTEE);
+			else
+				waddch(s->content, ACS_LLCORNER);
+
+			drawMenuItem(n->data, m, s);
+		}
+	}
+	pthread_mutex_unlock(&item->mutex);
+
+	return 1;
 }
 
 void handleUserInput(TUI *t){
@@ -137,12 +264,15 @@ int resizeSection(SECTION *s, int starty, int startx, int height, int width){
 int printChatMessage(char *msg){
 	TUI *t = tui;
 	SECTION *chat = t->chat;
+	if(chat->data == NULL)
+		return -1;
+
 	int size = strlen(msg) + 1;
 
 	char *save = malloc(size);
 	strhcpy(save, msg, size);
 
-	link_add(&chat->data, save);
+	link_add(chat->data, save);
 	wprintw(chat->content, "%s", save);
 	wrefresh(chat->content);
 
@@ -154,9 +284,12 @@ int drawMessages(TUI *t){
 	wclear(chat->content);
 	wmove(chat->content, 0, 0);
 
+	if(chat->data == NULL)
+		return -1;
+
 	// Print
 	struct link_Node *n;
-	for(n = chat->data.head; n != NULL; n = n->next){
+	for(n = chat->data->head; n != NULL; n = n->next){
 		wprintw(chat->content, "%s", n->data);
 		wrefresh(chat->content);
 	}
@@ -212,6 +345,7 @@ int typeCharacter(TUI *t, int ch){
 
 	text->chars[text->index] = (char) ch;
 	text->index++;
+	text->chars[text->index] = '\0';
 
 	drawTextinput(t);
 
@@ -315,10 +449,23 @@ int drawBorders(TUI *t){
 	3. Chatbox
 */
 int setupWindows(TUI *t){
+	MENU *menu = createMenu();
+	MENUITEM *item1 = createMenuItem("&Boundless", NULL);
+	MENUITEM *item2 = createMenuItem("&Programming", NULL);
+	MENUITEM *item3 = createMenuItem("#general", NULL);
+	MENUITEM *item4 = createMenuItem("#no-terroriz-plz", NULL);
+
+	addItemToMenu(menu, item1);
+	addItemToMenu(menu, item2);
+	addSubitem(item1, item3);
+	addSubitem(item1, item4);
+	item1->enableSubitems = ENABLE;
+
 	//Sidebar
 	int borderChars[8] = {ACS_VLINE, ACS_HLINE, ACS_ULCORNER, ACS_TTEE, ACS_LLCORNER, ACS_BTEE};
 	t->sidebar = createSection("Groups", borderChars);
 	drawSidebar(t->sidebar);
+	scrollok(t->sidebar->content, TRUE);
 
 	// Textbox
 	int borderChars1[] = {ACS_VLINE, ACS_HLINE, ACS_LTEE, ACS_RTEE, ACS_BTEE, ACS_LRCORNER};
@@ -335,6 +482,7 @@ int setupWindows(TUI *t){
 	setActiveSection(t, t->sidebar);
 
 	drawBorders(t);
+	drawMenu(menu, t->sidebar);
 	//wscrl
 
 	return 1;

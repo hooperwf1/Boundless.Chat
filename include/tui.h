@@ -2,7 +2,6 @@
 #define tui_h
 
 #include <curses.h>
-#include <menu.h>
 #include <stdio.h>
 #include <string.h>
 #include <hstring.h>
@@ -13,9 +12,29 @@
 #include "linkedlist.h"
 #include "logging.h"
 #include "communication.h"
+#include "chat.h"
 
 #define UNUSED(x) x __attribute__((unused))
 #define ARRAY_SIZE(arr) (int)(sizeof(arr)/sizeof(arr[0]))
+
+#define ENABLE 1
+#define DISABLE 0
+
+typedef struct {
+	char *text;	
+	void *ptr;
+
+	int enableSubitems;
+	struct link_List subitems;
+	pthread_mutex_t mutex;
+} MENUITEM;
+
+typedef struct {
+	struct link_List items;		
+
+	MENUITEM *selected;
+	pthread_mutex_t mutex;
+} MENU;
 
 typedef struct {
 	WINDOW *border;
@@ -29,11 +48,12 @@ typedef struct {
 
 	// Misc data (chat msg, groups, etc)
 	union {
-		struct link_List data; // For saved messages
+		struct link_List *data; // For saved messages
 		struct { // For text box
 			char chars[BUFSIZ];
 			int index;
 		};
+		MENU *menu; // For groups
 	};
 } SECTION;
 
@@ -43,12 +63,24 @@ typedef struct {
 	SECTION *text; // Text box
 
 	SECTION *active; // Which one is active
-	struct com_ConnectionList *cList;
+	CONLIST *cList;
 } TUI;
 
-TUI *init_tui(struct com_ConnectionList *cList);
+TUI *init_tui(CONLIST *cList);
 
 void tui_close();
+
+MENU *createMenu();
+MENUITEM *createMenuItem(char *text, void *ptr);
+
+void freeMenu(MENU *m);
+void freeMenuItem(void *iptr);
+
+int addItemToMenu(MENU *m, MENUITEM *i);
+int addSubitem(MENUITEM *item, MENUITEM *sub);
+
+int drawMenu(MENU *m, SECTION *s);
+int drawMenuItem(MENUITEM *item, MENU *m, SECTION *s);
 
 void handleUserInput(TUI *t);
 

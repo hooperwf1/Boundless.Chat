@@ -1,32 +1,49 @@
 #include "communication.h"
 
-struct com_ConnectionList *init_connectionList(){
+CONLIST *init_connectionList(){
 	// Allocate struct
-	struct com_ConnectionList *comList = calloc(1, sizeof(struct com_ConnectionList));
-	if(comList == NULL){
-		log_logError("Error initalizing connection list", FATAL);
+	CONLIST *cList = calloc(1, sizeof(CONLIST));
+	if(cList == NULL){
+		log_logError("Error initalizing connection list", ERROR);
 		return NULL;
 	}
 
 	// Init mutex
-	int ret = pthread_mutex_init(&comList->mutex, NULL);
+	int ret = pthread_mutex_init(&cList->mutex, NULL);
 	if(ret < 0){
-		log_logError("Error initalizing mutex", FATAL);
-		free(comList);
+		log_logError("Error initalizing mutex", ERROR);
+		free(cList);
+		return NULL;
+	}
+
+	// Allocate inital size for conns and pfds
+	cList->size = 10;
+	cList->conns = calloc(cList->size, sizeof(CONNECTION));
+	if(cList->conns == NULL){
+		log_logError("Error initalizing connection list", ERROR);
+		free(cList);
+		return NULL;
+	}
+
+	cList->pfds = calloc(cList->size, sizeof(struct pollfd));
+	if(cList->pfds == NULL){
+		log_logError("Error initalizing connection list", ERROR);
+		free(cList);
+		free(cList->conns);
 		return NULL;
 	}
 
 	// Set all fds to -1 to prevent them from being polled
-	for(int i = 0; i < ARRAY_SIZE(comList->pfds); i++){
-		comList->pfds[i].fd = -1;
+	for(int i = 0; i < cList->size; i++){
+		cList->pfds[i].fd = -1;
 	}
 
-	comList->numConnected = 0;
+	cList->numConnected = 0;
 
-	return comList;
+	return cList;
 }
 
-pthread_t com_startPolling(struct com_ConnectionList *cList){
+pthread_t com_startPolling(CONLIST *cList){
 	pthread_t thread;
 	if(pthread_create(&thread, NULL, com_pollConnections, cList) != 0){
 		log_logError("Error starting thread", ERROR);
@@ -39,7 +56,7 @@ pthread_t com_startPolling(struct com_ConnectionList *cList){
 void *com_pollConnections(void *ptr){
 	int ret;
 	char buff[BUFSIZ];
-	struct com_ConnectionList *comList = (struct com_ConnectionList *) ptr;
+	CONLIST *comList = (CONLIST *) ptr;
 	
 	// Disable SIGWINCH for this thread
 	sigset_t set;
@@ -52,14 +69,14 @@ void *com_pollConnections(void *ptr){
 	}
 
 	while(comList->numConnected > 0){
-		ret = poll(comList->pfds, ARRAY_SIZE(comList->pfds), -1);
+		ret = poll(comList->pfds, comList->size, -1);
 		if(ret == -1){
 			log_logError("Error polling", ERROR);
 			return NULL;
 		}
 
 		pthread_mutex_lock(&comList->mutex);
-		for(int i = 0; i < ARRAY_SIZE(comList->pfds); i++){
+		for(int i = 0; i < comList->size; i++){
 			if(comList->pfds[i].revents != 0){
 				if(comList->pfds[i].revents & POLLIN){ // Data to read
 					int bytes = read(comList->pfds[i].fd, buff, sizeof(buff)-1);
@@ -87,7 +104,7 @@ void *com_pollConnections(void *ptr){
 	return NULL;
 }
 
-int com_sendMessage(struct com_Connection *con, char *msg){
+int com_sendMessage(CONNECTION *con, char *msg){
 	if(con == NULL || msg == NULL)
 		return -1;
 
@@ -96,12 +113,12 @@ int com_sendMessage(struct com_Connection *con, char *msg){
 	return 1;
 }
 
-int com_deleteConnection(struct com_ConnectionList *cList, struct com_Connection *con, int pos){
+int com_deleteConnection(CONLIST *cList, CONNECTION *con, int pos){
 	int loc = pos;
 
 	if(con != NULL){ // Find it manually
 		pthread_mutex_lock(&cList->mutex);
-		loc = findArrayItem(cList->conns, sizeof(struct com_Connection), ARRAY_SIZE(cList->conns), con);
+		loc = findArrayItem(cList->conns, sizeof(CONNECTION), cList->size, con);
 		pthread_mutex_unlock(&cList->mutex);
 	}
 
@@ -117,20 +134,20 @@ int com_deleteConnection(struct com_ConnectionList *cList, struct com_Connection
 	return 1;
 }
 
-int com_listenToConnection(struct com_ConnectionList *cList, struct com_Connection *con){
+int com_listenToConnection(CONLIST *cList, CONNECTION *con){
 	if(cList == NULL || con == NULL)
 		return -1;
 
 	int ret = -1;
 	pthread_mutex_lock(&cList->mutex);
-	for (int i = 0; i < ARRAY_SIZE(cList->pfds); i++){
+	for (int i = 0; i < cList->size; i++){
 		if(cList->pfds[i].fd == -1){ // Unused spot
 			// Fill out pollfd
 			cList->pfds[i].fd = con->socket;
-			cList->pfds[i].events = POLLIN|POLLOUT;
+			cList->pfds[i].events = POLLIN;
 
 			// Put com_Connection in conns in the same index
-			memcpy(&cList->conns[i], con, sizeof(struct com_Connection));
+			memcpy(&cList->conns[i], con, sizeof(CONNECTION));
 
 			cList->numConnected++;
 			ret = i;
@@ -142,17 +159,24 @@ int com_listenToConnection(struct com_ConnectionList *cList, struct com_Connecti
 	return ret;
 }
 
-struct com_Connection *com_openConnection(char *hostname, int port){
-	int sock = com_connectSocket(hostname, port);
-	if(sock < 0)
-		return NULL;
-
-	struct com_Connection *c = malloc(sizeof(struct com_Connection));
+CONNECTION *com_openConnection(char *hostname, int port){
+	CONNECTION *c = malloc(sizeof(CONNECTION));
 	if(c == NULL){
-		close(sock);
 		log_logError("Error allocating connection", ERROR);
 		return NULL;
 	}
+
+	// Init mutex
+	int ret = pthread_mutex_init(&c->mutex, NULL);
+	if(ret < 0){
+		log_logError("Error initalizing mutex", ERROR);
+		free(c);
+		return NULL;
+	}
+
+	int sock = com_connectSocket(hostname, port);
+	if(sock < 0)
+		return NULL;
 
 	// Fill out connection
 	c->type = TYPE_SERV;

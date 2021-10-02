@@ -12,18 +12,19 @@ int main(){
 		return -1;
 
 	// Connect to boundless.chat at port 6667
-	struct com_ConnectionList *conList = init_connectionList();
+	CONLIST *conList = init_connectionList();
 	if(conList == NULL)
 		return -1;
 
-	TUI *tui = init_tui(conList);
-
-	struct com_Connection *con = com_openConnection("boundless.chat", 6667);	
+	CONNECTION *con = com_openConnection("boundless.chat", 6667);	
 	if(con != NULL){
 		com_listenToConnection(conList, con);
 	}
 
-	com_startPolling(conList);	
+	pthread_t thread = com_startPolling(conList);	
+	pthread_join(thread, NULL);
+
+	TUI *tui = init_tui(conList);
 
 	handleUserInput(tui);
 

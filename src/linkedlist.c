@@ -98,9 +98,14 @@ void *link_removeNode(struct link_List *list, struct link_Node *node){
 
 }
 
-void link_clear(struct link_List *list){
+void link_clear(struct link_List *list, void callback(void *ptr)){
 	while(link_isEmpty(list) == -1){ // Keep removing items until empty
-		free(link_remove(list, 0));
+		void *data = link_remove(list, 0);
+
+		if(callback != NULL)
+			callback(data);		
+		else
+			free(data);
 	}
 }
 

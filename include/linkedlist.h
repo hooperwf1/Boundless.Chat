@@ -34,7 +34,7 @@ void *link_remove(struct link_List *list, int pos);
 void *link_removeNode(struct link_List *list, struct link_Node *node);
 
 // Removes and frees a linked list
-void link_clear(struct link_List *list);
+void link_clear(struct link_List *list, void callback(void *ptr));
 
 int link_containsNode(struct link_List *list, struct link_Node *node);
 
