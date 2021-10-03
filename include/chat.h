@@ -2,6 +2,7 @@
 #define chat_h
 
 #include "linkedlist.h"
+#include "arraylist.h"
 
 typedef struct {
 	char *name;
@@ -24,7 +25,7 @@ typedef struct {
 	char *name;
 	USER *users[512];
 
-	struct link_List messages;
+	ARRAYLIST messages;
 } CHANNEL;
 
 typedef struct {

@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include "linkedlist.h"
+#include "arraylist.h"
 #include "logging.h"
 #include "communication.h"
 #include "chat.h"
@@ -25,12 +26,12 @@ typedef struct {
 	void *ptr;
 
 	int enableSubitems;
-	struct link_List subitems;
+	ARRAYLIST *subitems;
 	pthread_mutex_t mutex;
 } MENUITEM;
 
 typedef struct {
-	struct link_List items;		
+	ARRAYLIST *items;
 
 	MENUITEM *selected;
 	pthread_mutex_t mutex;
@@ -48,7 +49,7 @@ typedef struct {
 
 	// Misc data (chat msg, groups, etc)
 	union {
-		struct link_List *data; // For saved messages
+		ARRAYLIST *data; // For saved messages
 		struct { // For text box
 			char chars[BUFSIZ];
 			int index;

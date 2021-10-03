@@ -46,6 +46,12 @@ MENU *createMenu(){
 		return NULL;
 	}
 
+	m->items = arrl_createArrayList(20);
+	if(m->items == NULL){
+		free(m);
+		return NULL;
+	}
+
 	// Init mutex
 	int ret = pthread_mutex_init(&m->mutex, NULL);
 	if(ret < 0){
@@ -61,6 +67,12 @@ MENUITEM *createMenuItem(char *text, void *ptr){
 	MENUITEM *item = calloc(1, sizeof(MENUITEM));
 	if(item == NULL){
 		log_logError("Error allocating MENUITEM", ERROR);
+		return NULL;
+	}
+
+	item->subitems = arrl_createArrayList(5);
+	if(item->subitems == NULL){
+		free(item);
 		return NULL;
 	}
 
@@ -89,14 +101,19 @@ MENUITEM *createMenuItem(char *text, void *ptr){
 }
 
 void freeMenu(MENU *m){
-	link_clear(&m->items, freeMenuItem);
+	if(m == NULL)
+		return;
 
+	arrl_deleteArrayList(m->items, freeMenuItem);
 	free(m);
 }
 
 void freeMenuItem(void *iptr){
+	if(iptr == NULL)
+		return;
+
 	MENUITEM *i = (MENUITEM *) iptr;
-	link_clear(&i->subitems, freeMenuItem);
+	arrl_deleteArrayList(i->subitems, freeMenuItem);
 
 	free(i->text);
 	free(i);
@@ -105,10 +122,10 @@ void freeMenuItem(void *iptr){
 int addItemToMenu(MENU *m, MENUITEM *i){
 	pthread_mutex_lock(&m->mutex);
 	// Make this item selected if it is the first
-	if(link_isEmpty(&m->items) == 1)
+	if(m->items->length == 0)
 		m->selected = i;
 
-	link_add(&m->items, i);
+	arrl_addItem(m->items, i);
 	pthread_mutex_unlock(&m->mutex);
 
 	return 1;
@@ -116,7 +133,7 @@ int addItemToMenu(MENU *m, MENUITEM *i){
 
 int addSubitem(MENUITEM *item, MENUITEM *sub){
 	pthread_mutex_lock(&item->mutex);
-	link_add(&item->subitems, sub);
+	arrl_addItem(item->subitems, sub);
 	pthread_mutex_unlock(&item->mutex);
 
 	return 1;
@@ -127,9 +144,11 @@ int drawMenu(MENU *m, SECTION *s){
 	wmove(s->content, 0, 0);
 
 	pthread_mutex_lock(&m->mutex);
-	struct link_Node *n;
-	for(n = m->items.head; n != NULL; n = n->next){
-		drawMenuItem(n->data, m, s);
+	ARRAYLIST *l = m->items;
+	for(int i = 0; i < l->length; i++){
+		MENUITEM *data = arrl_getItem(l, i);
+
+		drawMenuItem(data, m, s);
 	}
 	pthread_mutex_unlock(&m->mutex);
 
@@ -149,15 +168,16 @@ int drawMenuItem(MENUITEM *item, MENU *m, SECTION *s){
 
 	// Draw any subitems if applicable
 	if(item->enableSubitems == ENABLE){
-		struct link_Node *n;
-		for(n = item->subitems.head; n != NULL; n = n->next){
-			//Branch before subitem
-			if(n->next != NULL)
+		ARRAYLIST *l = item->subitems;
+		for(int i = 0; i < l->length; i++){
+			MENUITEM *data = arrl_getItem(l, i);
+
+			if(i < l->length - 1)
 				waddch(s->content, ACS_LTEE);
 			else
 				waddch(s->content, ACS_LLCORNER);
 
-			drawMenuItem(n->data, m, s);
+			drawMenuItem(data, m, s);
 		}
 	}
 	pthread_mutex_unlock(&item->mutex);
@@ -272,7 +292,7 @@ int printChatMessage(char *msg){
 	char *save = malloc(size);
 	strhcpy(save, msg, size);
 
-	link_add(chat->data, save);
+	arrl_addItem(chat->data, save);
 	wprintw(chat->content, "%s", save);
 	wrefresh(chat->content);
 
@@ -288,9 +308,8 @@ int drawMessages(TUI *t){
 		return -1;
 
 	// Print
-	struct link_Node *n;
-	for(n = chat->data->head; n != NULL; n = n->next){
-		wprintw(chat->content, "%s", n->data);
+	for(int i = 0; i < chat->data->length; i++){
+		wprintw(chat->content, "%s", arrl_getItem(chat->data, i));
 		wrefresh(chat->content);
 	}
 
@@ -372,7 +391,9 @@ int sectionContainsPoint(SECTION *s, int y, int x){
 
 int drawBorderTitle(SECTION *s){
 	int width = s->endx - s->startx + 1;
+	wattron(s->border, A_BOLD);
 	mvwprintw(s->border, 0, (width-strlen(s->title))/2, s->title);
+	wattroff(s->border, A_BOLD);
 	wrefresh(s->border);
 
 	return 1;
