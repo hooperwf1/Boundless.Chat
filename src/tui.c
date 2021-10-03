@@ -139,7 +139,8 @@ int addSubitem(MENUITEM *item, MENUITEM *sub){
 	return 1;
 }
 
-int drawMenu(MENU *m, SECTION *s){
+int drawMenu(SECTION *s){
+	MENU *m = s->menu;
 	wclear(s->content);
 	wmove(s->content, 0, 0);
 
@@ -148,7 +149,7 @@ int drawMenu(MENU *m, SECTION *s){
 	for(int i = 0; i < l->length; i++){
 		MENUITEM *data = arrl_getItem(l, i);
 
-		drawMenuItem(data, m, s);
+		drawMenuItem(data, s);
 	}
 	pthread_mutex_unlock(&m->mutex);
 
@@ -157,7 +158,9 @@ int drawMenu(MENU *m, SECTION *s){
 	return 1;
 }
 
-int drawMenuItem(MENUITEM *item, MENU *m, SECTION *s){
+int drawMenuItem(MENUITEM *item, SECTION *s){
+	MENU *m = s->menu;
+
 	pthread_mutex_lock(&item->mutex);
 	//Draw item
 	if(item == m->selected)
@@ -177,7 +180,7 @@ int drawMenuItem(MENUITEM *item, MENU *m, SECTION *s){
 			else
 				waddch(s->content, ACS_LLCORNER);
 
-			drawMenuItem(data, m, s);
+			drawMenuItem(data, s);
 		}
 	}
 	pthread_mutex_unlock(&item->mutex);
@@ -460,16 +463,12 @@ int drawBorders(TUI *t){
 
 	drawMessages(t);
 	drawTextinput(t);
+	drawMenu(t->sidebar);
 
 	return 1;
 }
 
-/*	MUST be done in this order
-	1. Sidebar
-	2. Textbox
-	3. Chatbox
-*/
-int setupWindows(TUI *t){
+int setupSidebar(TUI *t){
 	MENU *menu = createMenu();
 	MENUITEM *item1 = createMenuItem("&Boundless", NULL);
 	MENUITEM *item2 = createMenuItem("&Programming", NULL);
@@ -482,28 +481,47 @@ int setupWindows(TUI *t){
 	addSubitem(item1, item4);
 	item1->enableSubitems = ENABLE;
 
-	//Sidebar
 	int borderChars[8] = {ACS_VLINE, ACS_HLINE, ACS_ULCORNER, ACS_TTEE, ACS_LLCORNER, ACS_BTEE};
 	t->sidebar = createSection("Groups", borderChars);
 	drawSidebar(t->sidebar);
+	t->sidebar->menu = menu;
 	scrollok(t->sidebar->content, TRUE);
 
-	// Textbox
+	return 1;
+}
+
+int setupTextbox(TUI *t){
 	int borderChars1[] = {ACS_VLINE, ACS_HLINE, ACS_LTEE, ACS_RTEE, ACS_BTEE, ACS_LRCORNER};
 	t->text = createSection("", borderChars1);
 	drawTextbox(t->text, t, 3);
 
+	return 1;
+}
+	
+int setupChatbox(TUI *t){
 	//Chatbox
 	int borderChars2[] = {ACS_VLINE, ACS_HLINE, ACS_TTEE, ACS_URCORNER, ACS_LTEE, ACS_RTEE};
 	t->chat = createSection("Chat", borderChars2);
 	drawChatbox(t->chat, t);
 	scrollok(t->chat->content, TRUE);
 
+	return 1;
+}
+
+/*	MUST be done in this order
+	1. Sidebar
+	2. Textbox
+	3. Chatbox
+*/
+int setupWindows(TUI *t){
+	setupSidebar(t);
+	setupTextbox(t);
+	setupChatbox(t);
+
 	// Default active section
 	setActiveSection(t, t->sidebar);
 
 	drawBorders(t);
-	drawMenu(menu, t->sidebar);
 	//wscrl
 
 	return 1;

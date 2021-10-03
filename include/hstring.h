@@ -4,6 +4,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 void lowerString(char *str);
 
@@ -15,5 +16,11 @@ size_t strhcat(char *dst, char *src, size_t size);
 
 // General character location
 int findCharacter(char *str, int size, char key);
+
+// Number of times a characters appears in a string
+int numChar(char *str, int size, char key);
+
+char **splitString(char *str, int size, char key);
+void freeStrSplit(char **split);
 
 #endif

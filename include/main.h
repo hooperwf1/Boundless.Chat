@@ -11,6 +11,7 @@
 #include "hstring.h"
 #include "communication.h"
 #include "array.h"
+#include "commands.h"
 
 #define ARRAY_SIZE(arr) (int)(sizeof(arr)/sizeof(arr[0]))
 

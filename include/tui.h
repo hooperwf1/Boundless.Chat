@@ -80,8 +80,8 @@ void freeMenuItem(void *iptr);
 int addItemToMenu(MENU *m, MENUITEM *i);
 int addSubitem(MENUITEM *item, MENUITEM *sub);
 
-int drawMenu(MENU *m, SECTION *s);
-int drawMenuItem(MENUITEM *item, MENU *m, SECTION *s);
+int drawMenu(SECTION *s);
+int drawMenuItem(MENUITEM *item, SECTION *s);
 
 void handleUserInput(TUI *t);
 
@@ -114,6 +114,9 @@ int drawBorder(SECTION *s, int bBuffer[LINES][COLS]);
 int drawBorders(TUI *t);
 
 //Place all windows
+int setupSidebar(TUI *t);
+int setupTextbox(TUI *t);
+int setupChatbox(TUI *t);
 int setupWindows(TUI *t);
 
 void handleResize(int sig);
