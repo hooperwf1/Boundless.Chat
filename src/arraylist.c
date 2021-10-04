@@ -51,6 +51,22 @@ int arrl_insertItem(ARRAYLIST *l, int index, void *ptr){
 	return 1;
 }
 
+void *arrl_deleteItem(ARRAYLIST *l, int index){
+	if(index > l->length || index < 0){
+		return NULL;
+	}
+
+	void *ptr = l->data[index];
+	
+	//Shift everything back one
+	l->length--;
+	for(int i = index; i < l->length; i++){
+		l->data[i] = l->data[i+1];
+	}
+
+	return ptr;
+}
+
 int arrl_addItem(ARRAYLIST *l, void *ptr){
 	return arrl_insertItem(l, l->length, ptr);
 }
@@ -61,6 +77,21 @@ void *arrl_getItem(ARRAYLIST *l, int index){
 	}
 
 	return l->data[index];
+}
+
+int arrl_contains(ARRAYLIST *l, void *ptr, int callback(void *d, void *p)){
+	for(int i = 0; i < l->length; i++){
+		void *data = arrl_getItem(l, i);
+		if(callback != NULL){
+			if(callback(ptr, data) == 1)
+				return i;
+		} else {
+			if(ptr == data)
+				return i;
+		}
+	}
+
+	return -1;
 }
 
 int arrl_enlargeData(ARRAYLIST *l, int inc){

@@ -10,15 +10,17 @@
 #include <poll.h>
 #include "chat.h"
 #include "linkedlist.h"
+#include "arraylist.h"
 
-typedef struct {
+struct _connection {
 	atomic_int type;
 	atomic_int socket;
 	char name[1024];
 
-	struct link_List groups, users;
+	ARRAYLIST *groups, *users;
 	pthread_mutex_t mutex;
-} CONNECTION;
+};
+typedef struct _connection CONNECTION;
 
 typedef struct {
 	CONNECTION *conns;
@@ -28,9 +30,10 @@ typedef struct {
 } CONLIST;
 
 #include "hstring.h"
-#include "linkedlist.h"
 #include "array.h"
 #include "main.h"
+#include "commands.h"
+#include "chat.h"
 
 // For connection type
 #define TYPE_SERV 0

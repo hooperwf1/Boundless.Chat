@@ -93,7 +93,7 @@ void *com_pollConnections(void *ptr){
 					// Ensure null byte
 					buff[bytes] = '\0';
 
-					printChatMessage(buff);
+					cmd_runCommandFromString(buff, &comList->conns[i]);
 				}
 			}
 		}
@@ -163,6 +163,19 @@ CONNECTION *com_openConnection(char *hostname, int port){
 	CONNECTION *c = malloc(sizeof(CONNECTION));
 	if(c == NULL){
 		log_logError("Error allocating connection", ERROR);
+		return NULL;
+	}
+
+	// Allocate array lists
+	c->groups = arrl_createArrayList(10);
+	if(c->groups == NULL){
+		free(c);
+		return NULL;
+	}
+	c->users = arrl_createArrayList(10);
+	if(c->groups == NULL){
+		free(c);
+		free(c->groups);
 		return NULL;
 	}
 

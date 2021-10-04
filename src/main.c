@@ -21,13 +21,11 @@ int main(){
 		com_listenToConnection(conList, con);
 	}
 
-	pthread_t thread = com_startPolling(conList);	
-	pthread_join(thread, NULL);
+	TUI *tui = init_tui(conList);
 
-	//TUI *tui = init_tui(conList);
+	com_startPolling(conList);	
 
-	//handleUserInput(tui);
-	cmd_runCommandFromString(":Joe PRIVMSG man :Hey whats up?\n", NULL);
+	handleUserInput(tui);
 
 	return 1;
 }

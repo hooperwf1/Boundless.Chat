@@ -2,7 +2,7 @@ IDIR = include
 SDIR = src
 ODIR = obj
 CC=gcc
-CFLAGS=-I$(IDIR) -lpthread -Wall -Werror -Wextra -g -Wno-format-truncation -lssl -lcrypto -lncursesw
+CFLAGS=-I$(IDIR) -lpthread -Wall -Werror -Wextra -g -Wno-format-truncation -lssl -lcrypto -lncursesw -D DEV
 
 _OBJS=main.o logging.o linkedlist.o hstring.o commands.o communication.o array.o tui.o chat.o arraylist.o
 OBJS=$(patsubst %,$(ODIR)/%,$(_OBJS))

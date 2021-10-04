@@ -78,13 +78,61 @@ int cmd_runCommandFromString(char *str, CONNECTION *origin){
 }
 
 int cmd_runCommand(COMMAND *cmd){
-	printf("%s %s\n", cmd->prefix, cmd->command);
-	for(int i = 0; i < cmd->paramCount; i++){
-		printf("%s\n", cmd->params[i]);
+	if(strncmp(cmd->command, "JOIN", ARRAY_SIZE(cmd->command)) == 0){
+		return cmd_join(cmd);	
+	} else if(strncmp(cmd->command, "PING", ARRAY_SIZE(cmd->command)) == 0){
+		return cmd_ping(cmd);
 	}
-	return cmd->paramCount;	
+
+	return -1;
 }
 
 void cmd_freeCommand(COMMAND *cmd){
 	free(cmd);
+}
+
+// Join either a group or channel
+int cmd_join(COMMAND *cmd){
+	if(cmd->paramCount < 1)
+		return -1;
+
+	void *ptr; // Generic for either group or channel
+	int loc = findCharacter(cmd->params[0], ARRAY_SIZE(cmd->params[0]), '/');
+	char *name = cmd->params[0];
+
+	if(loc == -1 && name[0] == '&'){ // it is a group
+		ptr = grp_createGroup(name);		
+
+		if(ptr == NULL)
+			return -1;
+
+		if(arrl_addItem(cmd->origin->groups, ptr) == -1){
+			grp_deleteGroup(ptr);
+			return -1;
+		}
+	} else { // it is a channel
+		GROUP *g = grp_getGroup(cmd->origin, cmd->params[0]);
+		if(g == NULL)
+			return -1;
+
+		name += loc + 1;
+		ptr = chan_createChannel(name);
+		if(ptr == NULL)
+			return -1;
+
+		if(grp_addChannel(g, ptr) == -1){
+			chan_deleteChannel(ptr);
+			return -1;
+		}
+	}
+
+	updateSidebar(tui, cmd->origin);
+
+	return 1;
+}
+
+int cmd_ping(COMMAND *cmd){
+	com_sendMessage(cmd->origin, "PONG\n");	
+
+	return 1;
 }

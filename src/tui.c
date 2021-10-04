@@ -20,7 +20,12 @@ TUI *init_tui(CONLIST *cList){
 		init_pair(1, COLOR_BLUE, COLOR_BLACK);
 	}
 
-	raw();
+	#ifdef DEV
+		cbreak();
+	#else
+		raw();
+	#endif
+
 	noecho();
 	keypad(stdscr, TRUE); //Enable F1, arrows keys, etc
 	box(stdscr, 0, 0);
@@ -120,6 +125,9 @@ void freeMenuItem(void *iptr){
 }
 
 int addItemToMenu(MENU *m, MENUITEM *i){
+	if(i == NULL)
+		return -1;
+
 	pthread_mutex_lock(&m->mutex);
 	// Make this item selected if it is the first
 	if(m->items->length == 0)
@@ -132,6 +140,9 @@ int addItemToMenu(MENU *m, MENUITEM *i){
 }
 
 int addSubitem(MENUITEM *item, MENUITEM *sub){
+	if(item == NULL || sub == NULL)
+		return -1;
+
 	pthread_mutex_lock(&item->mutex);
 	arrl_addItem(item->subitems, sub);
 	pthread_mutex_unlock(&item->mutex);
@@ -188,6 +199,56 @@ int drawMenuItem(MENUITEM *item, SECTION *s){
 	return 1;
 }
 
+int cmpClusAndMenuItem(void *g, void *i){
+	MENUITEM *item = (MENUITEM *) i;
+	if(item->ptr == g)
+		return 1;
+
+	return -1;
+}
+
+int updateSidebar(TUI *t, CONNECTION *c){
+	SECTION *s = t->sidebar;
+	MENU *m = s->menu;
+	ARRAYLIST *cl = c->groups, *ml = m->items;
+
+	pthread_mutex_lock(&c->mutex);
+
+	// Go thru connection to see what is missing	
+	for(int i = 0; i < cl->length; i++){
+		GROUP *g = arrl_getItem(cl, i);
+		MENUITEM *item;
+
+		pthread_mutex_lock(&m->mutex);
+		int loc = arrl_contains(ml, g, cmpClusAndMenuItem);
+		pthread_mutex_unlock(&m->mutex);
+		if(loc == -1){
+			item = createMenuItem(g->name, g);
+			addItemToMenu(m, item);
+		} else {
+			item = arrl_getItem(ml, loc);
+		}
+		item->enableSubitems = ENABLE;
+
+		// Check for missing channels/subitems
+		for(int x = 0; x < g->channels->length; x++){
+			CHANNEL *c = arrl_getItem(g->channels, x);
+
+			int subloc = arrl_contains(item->subitems, c, cmpClusAndMenuItem);
+			if(subloc == -1){
+				MENUITEM *subitem = createMenuItem(c->name, c);
+				addSubitem(item, subitem);
+			}
+		}
+	}
+
+	// TODO - remove leftovers
+
+	pthread_mutex_unlock(&c->mutex);
+
+	return 1;
+}
+
 void handleUserInput(TUI *t){
 	while(1){
 		int c = getch();
@@ -207,7 +268,7 @@ void handleUserInput(TUI *t){
 				if(t->active == t->text)
 					goto typing;
 				exit(1);
-			
+
 			// Type into the text box
 			default:
 			typing:
@@ -342,7 +403,7 @@ int typeCharacter(TUI *t, int ch){
 		printChatMessage(text->chars);
 		text->index = 0;
 
-		com_sendMessage(&t->cList->conns[0], text->chars);
+		com_sendMessage(text->c, text->chars);
 
 		text->chars[0] = '\0';
 		wclear(text->content);
@@ -470,16 +531,6 @@ int drawBorders(TUI *t){
 
 int setupSidebar(TUI *t){
 	MENU *menu = createMenu();
-	MENUITEM *item1 = createMenuItem("&Boundless", NULL);
-	MENUITEM *item2 = createMenuItem("&Programming", NULL);
-	MENUITEM *item3 = createMenuItem("#general", NULL);
-	MENUITEM *item4 = createMenuItem("#no-terroriz-plz", NULL);
-
-	addItemToMenu(menu, item1);
-	addItemToMenu(menu, item2);
-	addSubitem(item1, item3);
-	addSubitem(item1, item4);
-	item1->enableSubitems = ENABLE;
 
 	int borderChars[8] = {ACS_VLINE, ACS_HLINE, ACS_ULCORNER, ACS_TTEE, ACS_LLCORNER, ACS_BTEE};
 	t->sidebar = createSection("Groups", borderChars);
@@ -493,6 +544,7 @@ int setupSidebar(TUI *t){
 int setupTextbox(TUI *t){
 	int borderChars1[] = {ACS_VLINE, ACS_HLINE, ACS_LTEE, ACS_RTEE, ACS_BTEE, ACS_LRCORNER};
 	t->text = createSection("", borderChars1);
+	t->text->c = &t->cList->conns[0];
 	drawTextbox(t->text, t, 3);
 
 	return 1;

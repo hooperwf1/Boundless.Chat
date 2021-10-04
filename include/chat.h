@@ -1,14 +1,23 @@
 #ifndef chat_h
 #define chat_h
 
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include "hstring.h"
 #include "linkedlist.h"
 #include "arraylist.h"
+#include "logging.h"
+#include "communication.h"
+
+struct _connection;
+typedef struct _connection CONNECTION;
 
 typedef struct {
 	char *name;
 
 	// Private messages
-	struct link_List messages;
+	ARRAYLIST *messages;
 } USER;
 
 typedef struct {
@@ -23,14 +32,20 @@ typedef struct {
 
 typedef struct {
 	char *name;
-	USER *users[512];
-
-	ARRAYLIST messages;
+	ARRAYLIST *messages, *users;
 } CHANNEL;
 
 typedef struct {
-	USER *users[512];
-	CHANNEL channels[100];	
+	char *name; 
+	ARRAYLIST *channels, *users;
 } GROUP;
+
+GROUP *grp_createGroup(char *name);
+void grp_deleteGroup(void *gptr);
+GROUP *grp_getGroup(CONNECTION *c, char *name);
+int grp_addChannel(GROUP *g, CHANNEL *c);
+
+CHANNEL *chan_createChannel(char *name);
+void chan_deleteChannel(void *cptr);
 
 #endif

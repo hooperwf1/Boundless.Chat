@@ -53,6 +53,7 @@ typedef struct {
 		struct { // For text box
 			char chars[BUFSIZ];
 			int index;
+			CONNECTION *c; // Where it will be sent
 		};
 		MENU *menu; // For groups
 	};
@@ -66,6 +67,8 @@ typedef struct {
 	SECTION *active; // Which one is active
 	CONLIST *cList;
 } TUI;
+
+extern TUI *tui;
 
 TUI *init_tui(CONLIST *cList);
 
@@ -82,6 +85,10 @@ int addSubitem(MENUITEM *item, MENUITEM *sub);
 
 int drawMenu(SECTION *s);
 int drawMenuItem(MENUITEM *item, SECTION *s);
+
+// Update Menu based on c's GROUPS and CHANNELS
+int updateSidebar(TUI *t, CONNECTION *c);
+int cmpClusAndMenuItem(void *g, void *i);
 
 void handleUserInput(TUI *t);
 
