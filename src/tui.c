@@ -11,6 +11,8 @@ TUI *init_tui(CONLIST *cList){
 	tui = t;
 	t->cList = cList;
 
+	putenv("NCURSES_NO_UTF8_ACS=1");
+
 	setlocale(LC_ALL, "");
 	if(initscr() == NULL)
 		return NULL;
@@ -99,6 +101,7 @@ MENUITEM *createMenuItem(char *text, void *ptr){
 	}
 
 	item->enableSubitems = DISABLE;
+	item->parent = NULL;
 	item->ptr = ptr;
 	strhcpy(item->text, text, size);
 
@@ -144,6 +147,7 @@ int addSubitem(MENUITEM *item, MENUITEM *sub){
 		return -1;
 
 	pthread_mutex_lock(&item->mutex);
+	sub->parent = item;
 	arrl_addItem(item->subitems, sub);
 	pthread_mutex_unlock(&item->mutex);
 
@@ -199,6 +203,132 @@ int drawMenuItem(MENUITEM *item, SECTION *s){
 	return 1;
 }
 
+MENUITEM *selectMenuItem(MENU *m, int dir){
+	if(dir == 1)
+		return nextMenuItem(m);
+	else if(dir == -1)
+		return prevMenuItem(m);
+
+	return NULL;
+}
+
+/* Steps in order, until one works
+	1. First subitem
+	2. Next item in this list
+	3. Up levels until there is a next item
+	4. Failure
+*/
+MENUITEM *nextMenuItem(MENU *m){
+	MENUITEM *newS;
+
+	pthread_mutex_lock(&m->mutex);
+	newS = m->selected;
+
+	pthread_mutex_lock(&newS->mutex);
+	// First subitem
+	if(newS->enableSubitems == ENABLE && arrl_getItem(newS->subitems, 0) != NULL){
+		MENUITEM *item = arrl_getItem(newS->subitems, 0);
+		m->selected = item;
+		pthread_mutex_unlock(&newS->mutex);
+		pthread_mutex_unlock(&m->mutex);
+		return item;
+	} 
+	
+	// Next item
+	ARRAYLIST *pList = m->items;
+	if(newS->parent != NULL)
+		pList = newS->parent->subitems;
+
+	int loc = arrl_contains(pList, newS, NULL);
+	if(loc < pList->length - 1){
+		MENUITEM *item = arrl_getItem(pList, loc + 1);
+		m->selected = item;
+		pthread_mutex_unlock(&newS->mutex);
+		pthread_mutex_unlock(&m->mutex);
+		return item;
+	}
+
+	// Up levels
+	pthread_mutex_unlock(&newS->mutex);
+	while(1){
+		pList = m->items;
+		if(newS->parent != NULL)
+			pList = newS->parent->subitems;
+
+		loc = arrl_contains(pList, newS, NULL);
+		if(loc < pList->length - 1){
+			MENUITEM *item = arrl_getItem(pList, loc + 1);
+			m->selected = item;
+			pthread_mutex_unlock(&newS->mutex);
+			pthread_mutex_unlock(&m->mutex);
+			return item;
+		}
+
+		// Failed all the way up to the top of list
+		if(newS->parent == NULL)
+			break;
+
+		newS = newS->parent;
+	}
+
+	pthread_mutex_unlock(&m->mutex);
+
+	return NULL;
+}
+
+/* Steps in order, until one works
+	1. Last subitem of previous item
+	2. Previous item
+	3. Up a level, unless it is the FIRST item of the MENU
+	4. Failure
+*/
+MENUITEM *prevMenuItem(MENU *m){
+	MENUITEM *newS;
+
+	pthread_mutex_lock(&m->mutex);
+	newS = m->selected;
+	pthread_mutex_lock(&newS->mutex);
+
+	// Setup: get previous item
+	MENUITEM *prev = NULL;
+	ARRAYLIST *pList = m->items;
+	if(newS->parent != NULL)
+		pList = newS->parent->subitems;
+
+	int loc = arrl_contains(pList, newS, NULL);
+	if(loc > 0) {
+		prev = arrl_getItem(pList, loc-1);
+	}
+	
+	pthread_mutex_unlock(&newS->mutex);
+
+	if(prev != NULL) {
+		// Find last subitem
+		pthread_mutex_lock(&prev->mutex);
+		newS = prev;
+		while(newS->enableSubitems != DISABLE){
+			MENUITEM *temp = arrl_getItem(newS->subitems, newS->subitems->length-1);
+			if(temp == NULL) // No subitems
+				break;
+
+			newS = temp;
+		}
+		pthread_mutex_unlock(&prev->mutex);
+
+		m->selected = newS;
+		pthread_mutex_unlock(&m->mutex);
+		return newS;
+	}
+
+	// Parent item if in front
+	if(newS->parent != NULL)
+		m->selected = newS->parent;	
+
+	pthread_mutex_unlock(&m->mutex);
+
+	return newS->parent;
+}
+
 int cmpClusAndMenuItem(void *g, void *i){
 	MENUITEM *item = (MENUITEM *) i;
 	if(item->ptr == g)
@@ -246,6 +376,31 @@ int updateSidebar(TUI *t, CONNECTION *c){
 
 	pthread_mutex_unlock(&c->mutex);
 
+	drawMenu(s);
+
+	return 1;
+}
+
+int selectSidebarItem(TUI *t){
+	SECTION *side = t->sidebar;
+	SECTION *chat = t->chat;
+	MENU *m = side->menu;
+
+	if(m->selected == NULL)
+		return -1;
+
+	pthread_mutex_lock(&m->mutex);
+
+	// Group, just toggle subitems
+	if(m->selected->text[0] == '&') // XOR to toggle 1 to 0 and vice versa
+		m->selected->enableSubitems ^= ENABLE;
+	else // Channel
+		strhcpy(chat->title, m->selected->text, ARRAY_SIZE(chat->title));
+
+	pthread_mutex_unlock(&m->mutex);
+	
+	drawBorders(t);
+
 	return 1;
 }
 
@@ -268,6 +423,28 @@ void handleUserInput(TUI *t){
 				if(t->active == t->text)
 					goto typing;
 				exit(1);
+
+			case KEY_ENTER:
+			case '\n':
+				if(t->active == t->text)
+					sendTextBuffer(t);
+				else if(t->active == t->sidebar)
+					selectSidebarItem(t);	
+				break;
+
+			case KEY_DOWN:
+				if(t->active == t->sidebar){
+					selectMenuItem(t->sidebar->menu, 1);
+					drawMenu(t->sidebar);
+				}
+				break;
+
+			case KEY_UP:
+				if(t->active == t->sidebar){
+					selectMenuItem(t->sidebar->menu, -1);
+					drawMenu(t->sidebar);
+				}
+				break;
 
 			// Type into the text box
 			default:
@@ -391,26 +568,33 @@ int drawTextinput(TUI *t){
 	return 1;
 }
 
+int sendTextBuffer(TUI *t){
+	SECTION *text = t->text;
+
+	if(text->index <= 0)
+		return -1;
+
+	text->chars[text->index] = '\n';
+	text->index++;
+	text->chars[text->index] = '\0';
+
+	printChatMessage(text->chars);
+	text->index = 0;
+
+	com_sendMessage(text->c, text->chars);
+
+	text->chars[0] = '\0';
+	wclear(text->content);
+	wrefresh(text->content);
+
+	return 1;
+}
+
 int typeCharacter(TUI *t, int ch){
 	SECTION *text = t->text;
 
 	// Enter
-	if((ch == KEY_ENTER || ch == '\n') && text->index > 0){
-		text->chars[text->index] = '\n';
-		text->index++;
-		text->chars[text->index] = '\0';
-
-		printChatMessage(text->chars);
-		text->index = 0;
-
-		com_sendMessage(text->c, text->chars);
-
-		text->chars[0] = '\0';
-		wclear(text->content);
-		wrefresh(text->content);
-
-		return 1;
-	} else if (ch == KEY_BACKSPACE){
+	if (ch == KEY_BACKSPACE){
 		int cur = getcurx(text->content);
 		if(cur > 0){ // Is at beginning of line?
 			text->index--;
@@ -484,11 +668,14 @@ int drawBorder(SECTION *s, int bBuffer[LINES][COLS]){
 	bBuffer[s->endy][s->startx] = chars[4];
 	bBuffer[s->endy][s->endx] = chars[5];
 
-	wrefresh(s->content);
-
 	return 1;
 }
 
+/*	MUST be done in this order
+	1. Sidebar
+	2. Textbox
+	3. Chatbox
+*/
 int drawBorders(TUI *t){
 	int bBuffer[LINES][COLS]; // Buffer to store border for later drawing
 	memset(bBuffer, 0, LINES * COLS * sizeof(int));
@@ -531,9 +718,21 @@ int drawBorders(TUI *t){
 
 int setupSidebar(TUI *t){
 	MENU *menu = createMenu();
+	MENUITEM *i1 = createMenuItem("&bruh", NULL);
+	MENUITEM *i2 = createMenuItem("&bruv", NULL);
+	MENUITEM *i3 = createMenuItem("bruk", NULL);
+	MENUITEM *i4 = createMenuItem("brum", NULL);
+	MENUITEM *i5 = createMenuItem("brua", NULL);
+	addItemToMenu(menu, i1);
+	addItemToMenu(menu, i2);
+	addSubitem(i1, i3);
+	addSubitem(i1, i4);
+	addSubitem(i2, i5);
+	i1->enableSubitems = ENABLE;
+	menu->selected = i3;
 
 	int borderChars[8] = {ACS_VLINE, ACS_HLINE, ACS_ULCORNER, ACS_TTEE, ACS_LLCORNER, ACS_BTEE};
-	t->sidebar = createSection("Groups", borderChars);
+	t->sidebar = createSection("No Connection", borderChars);
 	drawSidebar(t->sidebar);
 	t->sidebar->menu = menu;
 	scrollok(t->sidebar->content, TRUE);
@@ -560,11 +759,6 @@ int setupChatbox(TUI *t){
 	return 1;
 }
 
-/*	MUST be done in this order
-	1. Sidebar
-	2. Textbox
-	3. Chatbox
-*/
 int setupWindows(TUI *t){
 	setupSidebar(t);
 	setupTextbox(t);
